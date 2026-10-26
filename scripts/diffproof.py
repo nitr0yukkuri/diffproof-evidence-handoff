@@ -289,6 +289,7 @@ def inspect_repository(repo: Path, base: Optional[str] = None) -> dict[str, Any]
 
     changes: dict[str, list[str]] = {"working_tree": [], "staged": [], "untracked": [], "base_to_head": []}
     base_comparison_status = "NOT RUN" if base is None else "UNKNOWN"
+    path_inventory_status = "PASS"
     for key, args in (
         ("working_tree", ["diff", "--name-only", "--no-renames", "-z"]),
         ("staged", ["diff", "--cached", "--name-only", "--no-renames", "-z", "HEAD"] if head else ["diff", "--cached", "--name-only", "--no-renames", "-z"]),
@@ -297,6 +298,9 @@ def inspect_repository(repo: Path, base: Optional[str] = None) -> dict[str, Any]
         result = _run_git(root, args)
         if result.get("returncode") == 0:
             changes[key] = _split_paths(result.get("stdout", ""))
+        else:
+            path_inventory_status = "UNKNOWN"
+            changes[f"{key}_error"] = ["Git path inventory command failed; inspect the worktree manually."]
     if head:
         if base:
             resolved = _run_git(root, ["rev-parse", "--verify", "--end-of-options", f"{base}^{{commit}}"])
@@ -327,13 +331,23 @@ def inspect_repository(repo: Path, base: Optional[str] = None) -> dict[str, Any]
         checks.append(check)
     checks.append(_check_untracked_whitespace(root, changes["untracked"]))
 
-    local_changes = any(changes[key] for key in ("working_tree", "staged", "untracked"))
+    local_changes = bool(status_lines)
     if base is None:
         changes_detected = local_changes
-        change_summary = "CHANGES DETECTED" if local_changes else "NO WORKTREE CHANGES; BASE NOT COMPARED"
+        change_summary = (
+            "CHANGES DETECTED; PATH INVENTORY UNKNOWN"
+            if local_changes and path_inventory_status == "UNKNOWN"
+            else "CHANGES DETECTED" if local_changes
+            else "NO WORKTREE CHANGES; BASE NOT COMPARED"
+        )
     elif base_comparison_status == "PASS":
         changes_detected = local_changes or bool(changes["base_to_head"])
-        change_summary = "CHANGES DETECTED" if changes_detected else "NO CHANGE DETECTED"
+        change_summary = (
+            "CHANGES DETECTED; PATH INVENTORY UNKNOWN"
+            if changes_detected and path_inventory_status == "UNKNOWN"
+            else "CHANGES DETECTED" if changes_detected
+            else "NO CHANGE DETECTED"
+        )
     else:
         changes_detected = True if local_changes else None
         change_summary = (
@@ -350,6 +364,7 @@ def inspect_repository(repo: Path, base: Optional[str] = None) -> dict[str, Any]
         "head": head,
         "base_requested": base,
         "base_comparison_status": base_comparison_status,
+        "path_inventory_status": path_inventory_status,
         "changes_detected": changes_detected,
         "change_summary": change_summary,
         "git_status_porcelain": status_lines,
