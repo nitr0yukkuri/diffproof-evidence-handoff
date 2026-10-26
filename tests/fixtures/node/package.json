@@ -1,0 +1,10 @@
+{
+  "name": "diffproof-node-fixture",
+  "private": true,
+  "scripts": {
+    "test": "node --test",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
+  }
+}
