@@ -48,6 +48,18 @@ class DiscoveryTests(unittest.TestCase):
         self.assertIn("Candidates only", result["execution_policy"])
         self.assertIn(".github/workflows/ci.yml", result["workflow_files"])
 
+    def test_python_project_discovers_tests_without_pytest_configuration(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent) as temp:
+            root = Path(temp)
+            (root / "pyproject.toml").write_text(
+                '[project]\nname = "python-fixture"\nversion = "0.1.0"\n',
+                encoding="utf-8",
+            )
+            (root / "tests").mkdir()
+            result = diffproof.discover_candidates(root)
+            commands = {item["command_candidate"] for item in result["verification_candidates"]}
+            self.assertIn("python -m pytest", commands)
+
     def test_missing_commands_are_not_run(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent) as temp:
             root = Path(temp)
@@ -103,14 +115,52 @@ class GitInspectionTests(unittest.TestCase):
     def init_repo(self, root: Path) -> None:
         subprocess.run(["git", "init", str(root)], check=True, capture_output=True, text=True)
 
+    def init_committed_repo(self, root: Path) -> None:
+        self.init_repo(root)
+        (root / "tracked.txt").write_text("base\\n", encoding="utf-8")
+        commands = (
+            ["config", "user.name", "DiffProof Tests"],
+            ["config", "user.email", "diffproof-tests@example.invalid"],
+            ["add", "tracked.txt"],
+            ["commit", "-m", "initial fixture"],
+        )
+        for args in commands:
+            subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, text=True)
+
     def test_clean_repo_reports_no_change_and_only_actual_inspection_passes(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent) as temp:
             root = Path(temp)
             self.init_repo(root)
             result = diffproof.inspect_repository(root)
             self.assertFalse(result["changes_detected"])
-            self.assertEqual(result["change_summary"], "NO CHANGE DETECTED")
+            self.assertEqual(result["change_summary"], "NO WORKTREE CHANGES; BASE NOT COMPARED")
+            self.assertEqual(result["base_comparison_status"], "NOT RUN")
             self.assertEqual([check["status"] for check in result["executed_inspection_checks"]], ["PASS", "PASS", "SKIPPED"])
+
+    def test_invalid_base_reports_unknown_instead_of_no_change(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent) as temp:
+            root = Path(temp)
+            self.init_committed_repo(root)
+            result = diffproof.inspect_repository(root, base="missing-base")
+            self.assertEqual(result["base_comparison_status"], "UNKNOWN")
+            self.assertIsNone(result["changes_detected"])
+            self.assertEqual(result["change_summary"], "UNKNOWN — BASE COMPARISON FAILED")
+
+    def test_staged_and_unstaged_paths_are_reported_separately(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent) as temp:
+            root = Path(temp)
+            self.init_committed_repo(root)
+            (root / "tracked.txt").write_text("unstaged\\n", encoding="utf-8")
+            (root / "staged.txt").write_text("staged\\n", encoding="utf-8")
+            subprocess.run(
+                ["git", "-C", str(root), "add", "staged.txt"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            result = diffproof.inspect_repository(root)
+            self.assertEqual(result["changed_paths"]["working_tree"], ["tracked.txt"])
+            self.assertEqual(result["changed_paths"]["staged"], ["staged.txt"])
 
     def test_whitespace_failure_is_reported(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent) as temp:
