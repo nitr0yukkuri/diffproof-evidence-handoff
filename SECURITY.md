@@ -20,7 +20,7 @@ The Skill itself cannot enforce permissions granted by an agent host. Do not gra
 
 - Source-level review: performed locally for this release candidate. The helper has no network client, environment-variable reads, credential literals, shell-string execution, or GitHub mutation calls. Its only child processes are fixed Git inspection commands; the test harness uses temporary Git fixtures and deterministic status-classification cases.
 - Symlink boundaries: tests confirm manifest and workflow-directory links resolving outside the requested root are ignored.
-- Package contents: the ZIP contains text source/docs/tests only; no `.git`, bytecode cache, binary, or rights-hold memo is included.
+- Package contents: no submission ZIP is included in this release candidate, so archive contents have not been validated. Before submission, inspect the generated ZIP and confirm it contains only intended text source/docs/tests, excluding `.git`, bytecode caches, binaries, and internal review notes.
 - Automated Agensi scan: **NOT RUN**; no upload was made.
 - Agensi human approval: **NOT RUN**; no listing was submitted.
 - Secret scanning/SAST by a dedicated security product: **NOT RUN**.
