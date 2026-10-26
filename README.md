@@ -11,7 +11,7 @@ It is designed for repositories that use Node.js/TypeScript/JavaScript, Go, Pyth
 - Inspects the requested scope, Git diff, staged/unstaged state, and untracked files.
 - Finds likely check commands from project configuration and CI evidence, while labeling them as candidates rather than executing them.
 - Requires the agent to inspect scripts and side effects before a check is run.
-- Separates `PASS`, `FAIL`, `SKIPPED`, `NOT RUN`, and `UNKNOWN` so missing or stale evidence cannot become a success claim.
+- Separates `PASS`, `FAIL`, `SKIPPED`, `NOT RUN`, and `UNKNOWN` to make unsupported success claims easier to catch. Agent adherence is not deterministic, so evaluate the workflow with the agents you use.
 - Produces a concise change handoff and optional, unposted PR description.
 - Leaves design decisions, risk acceptance, approvals, and merge decisions with people.
 
