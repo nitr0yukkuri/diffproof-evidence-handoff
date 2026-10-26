@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "diffproof.py"
 sys.path.insert(0, str(SCRIPT.parent))
@@ -161,6 +162,27 @@ class GitInspectionTests(unittest.TestCase):
             result = diffproof.inspect_repository(root)
             self.assertEqual(result["changed_paths"]["working_tree"], ["tracked.txt"])
             self.assertEqual(result["changed_paths"]["staged"], ["staged.txt"])
+
+    def test_status_changes_survive_failed_path_inventory(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent) as temp:
+            root = Path(temp)
+            self.init_committed_repo(root)
+            (root / "tracked.txt").write_text("changed\\n", encoding="utf-8")
+            original_run = diffproof._run_git
+
+            def fail_working_diff(repo_path, args, timeout=12):
+                if args[:2] == ["diff", "--name-only"]:
+                    return {"started": True, "returncode": 1, "stdout": "", "stderr": "fixture failure"}
+                return original_run(repo_path, args, timeout)
+
+            with patch.object(diffproof, "_run_git", side_effect=fail_working_diff):
+                result = diffproof.inspect_repository(root)
+
+            self.assertTrue(result["changes_detected"])
+            self.assertEqual(result["path_inventory_status"], "UNKNOWN")
+            self.assertEqual(result["change_summary"], "CHANGES DETECTED; PATH INVENTORY UNKNOWN")
+            self.assertTrue(result["git_status_porcelain"])
+            self.assertIn("working_tree_error", result["changed_paths"])
 
     def test_whitespace_failure_is_reported(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent) as temp:
