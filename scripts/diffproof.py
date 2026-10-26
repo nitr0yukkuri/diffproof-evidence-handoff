@@ -165,7 +165,7 @@ def discover_candidates(root: Path) -> dict[str, Any]:
                 warnings.append(f"{relative_manifest} could not be read safely; ignored.")
                 continue
             lower = pyproject.lower()
-            if "[tool.pytest" in lower or (project_path / "pytest.ini").is_file() or (project_path / "tests").is_dir():
+            if "[tool.pytest" in lower or (project_root / "pytest.ini").is_file() or (project_root / "tests").is_dir():
                 candidates.append(_candidate("Python", "python -m pytest", f"{relative_manifest} or tests/ (candidate; confirm test runner exists)"))
             if "[tool.ruff" in lower:
                 candidates.append(_candidate("Python", "ruff check .", f"{relative_manifest}:[tool.ruff]"))
@@ -288,8 +288,9 @@ def inspect_repository(repo: Path, base: Optional[str] = None) -> dict[str, Any]
     status_lines = [line for line in status.get("stdout", "").splitlines() if line]
 
     changes: dict[str, list[str]] = {"working_tree": [], "staged": [], "untracked": [], "base_to_head": []}
+    base_comparison_status = "NOT RUN" if base is None else "UNKNOWN"
     for key, args in (
-        ("working_tree", ["diff", "--name-only", "--no-renames", "-z", "HEAD"] if head else ["diff", "--name-only", "--no-renames", "-z"]),
+        ("working_tree", ["diff", "--name-only", "--no-renames", "-z"]),
         ("staged", ["diff", "--cached", "--name-only", "--no-renames", "-z", "HEAD"] if head else ["diff", "--cached", "--name-only", "--no-renames", "-z"]),
         ("untracked", ["ls-files", "--others", "--exclude-standard", "-z"]),
     ):
@@ -304,6 +305,7 @@ def inspect_repository(repo: Path, base: Optional[str] = None) -> dict[str, Any]
                 result = _run_git(root, ["diff", "--name-only", "--no-renames", "-z", f"{base_sha}...HEAD"])
                 if result.get("returncode") == 0:
                     changes["base_to_head"] = _split_paths(result.get("stdout", ""))
+                    base_comparison_status = "PASS"
                 else:
                     changes["base_to_head_error"] = ["Base comparison failed; inspect the diff manually."]
             else:
@@ -325,7 +327,20 @@ def inspect_repository(repo: Path, base: Optional[str] = None) -> dict[str, Any]
         checks.append(check)
     checks.append(_check_untracked_whitespace(root, changes["untracked"]))
 
-    has_changes = any(changes[key] for key in ("working_tree", "staged", "untracked", "base_to_head"))
+    local_changes = any(changes[key] for key in ("working_tree", "staged", "untracked"))
+    if base is None:
+        changes_detected = local_changes
+        change_summary = "CHANGES DETECTED" if local_changes else "NO WORKTREE CHANGES; BASE NOT COMPARED"
+    elif base_comparison_status == "PASS":
+        changes_detected = local_changes or bool(changes["base_to_head"])
+        change_summary = "CHANGES DETECTED" if changes_detected else "NO CHANGE DETECTED"
+    else:
+        changes_detected = True if local_changes else None
+        change_summary = (
+            "CHANGES DETECTED; BASE COMPARISON UNKNOWN"
+            if local_changes
+            else "UNKNOWN — BASE COMPARISON FAILED"
+        )
     repo_inventory = discover_candidates(root)
     return {
         "tool": "DiffProof",
@@ -334,8 +349,9 @@ def inspect_repository(repo: Path, base: Optional[str] = None) -> dict[str, Any]
         "repository_root": str(root),
         "head": head,
         "base_requested": base,
-        "changes_detected": has_changes,
-        "change_summary": "CHANGES DETECTED" if has_changes else "NO CHANGE DETECTED",
+        "base_comparison_status": base_comparison_status,
+        "changes_detected": changes_detected,
+        "change_summary": change_summary,
         "git_status_porcelain": status_lines,
         "changed_paths": changes,
         "executed_inspection_checks": checks,
