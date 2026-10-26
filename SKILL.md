@@ -63,7 +63,7 @@ Turn a completed implementation into a reviewable change summary with evidence, 
    - `NOT RUN` — not attempted, including when a required executable or setup is unavailable.
    - `UNKNOWN` — available evidence cannot establish whether it ran or what the outcome was.
 
-   Do not upgrade `NOT RUN`, `SKIPPED`, or `UNKNOWN` to `PASS`. A missing test command is not a passing test. If no files changed, state `NO CHANGE DETECTED`; do not imply that tests ran.
+   Do not upgrade `NOT RUN`, `SKIPPED`, or `UNKNOWN` to `PASS`. A missing test command is not a passing test. If the complete intended comparison shows no changed files, state `NO CHANGE DETECTED`; if only the worktree was checked and no base was compared, state that narrower result (for example, `NO WORKTREE CHANGES; BASE NOT COMPARED`). Do not imply that tests ran.
 
 6. **Assess impact and residual risk.** Check documentation only where behavior, user-facing instructions, commands, APIs, configuration, or a significant design decision changed. Consult/update an ADR only when a material design decision changed and the repository uses ADRs. Identify areas not covered by executed checks, platform/environment assumptions, external dependencies, data/security implications, and risks that tests cannot settle. Keep AI review findings distinct from test evidence.
 
